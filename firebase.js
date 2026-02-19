@@ -12,12 +12,16 @@ import {
     serverTimestamp 
 } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js';
 
-// Конфигурация Firebase - ЗАМЕНИ НА СВОИ ДАННЫЕ ИЗ ПРОЕКТА
+// Твой полный конфиг Firebase
 const firebaseConfig = {
-    apiUrl: "https://wolcoin-6fcf5-default-rtdb.europe-west1.firebasedatabase.app", // твоя ссылка
-    databaseURL: "https://wolcoin-6fcf5-default-rtdb.europe-west1.firebasedatabase.app",
-    // Обычно конфиг содержит больше полей, но для Realtime Database достаточно databaseURL
-    // если проект создан через консоль Firebase, добавь остальные поля (apiKey, authDomain и т.д.)
+  apiKey: "AIzaSyDXibm6St9QjnsDfC1O2RfI7ptqREBEDCU",
+  authDomain: "wolcoin-6fcf5.firebaseapp.com",
+  databaseURL: "https://wolcoin-6fcf5-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "wolcoin-6fcf5",
+  storageBucket: "wolcoin-6fcf5.firebasestorage.app",
+  messagingSenderId: "2115234602",
+  appId: "1:2115234602:web:2f8d392fefb445bf3d8c53",
+  measurementId: "G-54ZMG2WXRK"
 };
 
 // Инициализация Firebase
@@ -166,7 +170,8 @@ class UserData {
     }
 
     // Получить уровень буста
-    getBoostLevel(boostType) {
+    async getBoostLevel(boostType) {
+        const snapshot = await get(this.userRef);
         return snapshot.val().boostLevels?.[boostType] || 1;
     }
 
