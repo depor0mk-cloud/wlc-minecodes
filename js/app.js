@@ -1,226 +1,196 @@
-// js/firebase.js
+import { UserData } from './firebase.js';
 
-// Импорт функций Firebase SDK (используем модульный подход)
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
-import { 
-    getDatabase, 
-    ref, 
-    set, 
-    get, 
-    update,
-    onValue,
-    serverTimestamp 
-} from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js';
+// Элементы DOM
+const balanceEl = document.getElementById('balance');
+const countdownEl = document.getElementById('countdown');
+const startMiningBtn = document.getElementById('startMiningBtn');
+const minerStatus = document.getElementById('minerStatus');
+const progressContainer = document.getElementById('progressContainer');
+const progressBar = document.getElementById('progressBar');
+const energyBar = document.getElementById('energyBar');
+const energyValue = document.getElementById('energyValue');
+const profileBtn = document.getElementById('profileBtn');
+const navBoost = document.getElementById('navBoost');
+const navTasks = document.getElementById('navTasks');
+const navProfile = document.getElementById('navProfile');
 
-// Твой полный конфиг Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyDXibm6St9QjnsDfC1O2RfI7ptqREBEDCU",
-  authDomain: "wolcoin-6fcf5.firebaseapp.com",
-  databaseURL: "https://wolcoin-6fcf5-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "wolcoin-6fcf5",
-  storageBucket: "wolcoin-6fcf5.firebasestorage.app",
-  messagingSenderId: "2115234602",
-  appId: "1:2115234602:web:2f8d392fefb445bf3d8c53",
-  measurementId: "G-54ZMG2WXRK"
-};
+// Переменные
+let tg = window.Telegram?.WebApp;
+let userData = null;
+let currentUser = null;
+let miningInterval = null;
+let miningStartTime = null;
+const miningDuration = 30000;
 
-// Инициализация Firebase
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+// Функции
+async function initApp() {
+    try {
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
 
-// Класс для работы с пользовательскими данными
-class UserData {
-    constructor(telegramId) {
-        this.telegramId = telegramId;
-        this.userRef = ref(database, `users/${telegramId}`);
-    }
-
-    // Создание или получение профиля пользователя
-    async initUser(telegramUser) {
-        const snapshot = await get(this.userRef);
+        let tgUser = tg?.initDataUnsafe?.user;
         
-        if (!snapshot.exists()) {
-            // Новый пользователь - создаём запись
-            const newUser = {
-                telegramId: this.telegramId,
-                firstName: telegramUser.first_name || '',
-                lastName: telegramUser.last_name || '',
-                username: telegramUser.username || '',
-                balance: 0, // начальный баланс 0 WOL
-                energy: 1000, // максимальная энергия
-                maxEnergy: 1000,
-                lastEnergyUpdate: serverTimestamp(),
-                hashRate: 1, // базовый хэшрейт
-                boostLevels: {
-                    energy: 1,
-                    speed: 1,
-                    power: 1
-                },
-                createdAt: serverTimestamp(),
-                lastLogin: serverTimestamp(),
-                totalMined: 0,
-                referrals: 0
+        // Тестовый режим если нет Telegram
+        if (!tgUser) {
+            console.log('Тестовый режим');
+            tgUser = {
+                id: 123456789,
+                first_name: 'Тест',
+                last_name: '',
+                username: 'testuser'
             };
-            
-            await set(this.userRef, newUser);
-            return newUser;
-        } else {
-            // Обновляем время последнего входа
-            await update(this.userRef, {
-                lastLogin: serverTimestamp()
-            });
-            return snapshot.val();
         }
-    }
 
-    // Получение данных пользователя в реальном времени
-    onUserUpdate(callback) {
-        return onValue(this.userRef, (snapshot) => {
-            callback(snapshot.val());
+        userData = new UserData(tgUser.id.toString());
+        currentUser = await userData.initUser(tgUser);
+        
+        if (!currentUser) {
+            minerStatus.textContent = 'Ошибка подключения к базе';
+            return;
+        }
+
+        updateUI();
+        startEnergyRegeneration();
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+
+        userData.onUserUpdate((updatedData) => {
+            if (updatedData) {
+                currentUser = updatedData;
+                updateUI();
+            }
         });
-    }
 
-    // Обновление баланса
-    async updateBalance(newBalance) {
-        await update(this.userRef, {
-            balance: newBalance
-        });
-    }
-
-    // Добавление монет к балансу
-    async addCoins(amount) {
-        const snapshot = await get(this.userRef);
-        if (snapshot.exists()) {
-            const currentBalance = snapshot.val().balance || 0;
-            await update(this.userRef, {
-                balance: currentBalance + amount,
-                totalMined: (snapshot.val().totalMined || 0) + amount
-            });
-        }
-    }
-
-    // Списание монет (проверка достаточности баланса внутри)
-    async spendCoins(amount) {
-        const snapshot = await get(this.userRef);
-        if (snapshot.exists()) {
-            const currentBalance = snapshot.val().balance || 0;
-            if (currentBalance >= amount) {
-                await update(this.userRef, {
-                    balance: currentBalance - amount
-                });
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Обновление энергии
-    async updateEnergy(newEnergy) {
-        const snapshot = await get(this.userRef);
-        if (snapshot.exists()) {
-            const maxEnergy = snapshot.val().maxEnergy || 1000;
-            // Энергия не может превышать максимум и быть меньше 0
-            const clampedEnergy = Math.min(maxEnergy, Math.max(0, newEnergy));
-            await update(this.userRef, {
-                energy: clampedEnergy,
-                lastEnergyUpdate: serverTimestamp()
-            });
-        }
-    }
-
-    // Использовать энергию (списать, если достаточно)
-    async useEnergy(amount) {
-        const snapshot = await get(this.userRef);
-        if (snapshot.exists()) {
-            const currentEnergy = snapshot.val().energy || 0;
-            if (currentEnergy >= amount) {
-                const newEnergy = currentEnergy - amount;
-                await this.updateEnergy(newEnergy);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Восстановление энергии (должно вызываться периодически)
-    async regenerateEnergy() {
-        const snapshot = await get(this.userRef);
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            const currentEnergy = data.energy || 0;
-            const maxEnergy = data.maxEnergy || 1000;
-            const lastUpdate = data.lastEnergyUpdate ? new Date(data.lastEnergyUpdate) : new Date();
-            
-            // Прошло секунд с последнего обновления
-            const now = new Date();
-            const secondsPassed = Math.floor((now - lastUpdate) / 1000);
-            
-            // Скорость восстановления: 1 энергии в минуту (можно менять)
-            const regenRate = 1/60; // в секунду
-            
-            const regenerated = Math.floor(secondsPassed * regenRate);
-            if (regenerated > 0) {
-                const newEnergy = Math.min(maxEnergy, currentEnergy + regenerated);
-                await update(this.userRef, {
-                    energy: newEnergy,
-                    lastEnergyUpdate: serverTimestamp()
-                });
-            }
-        }
-    }
-
-    // Получить уровень буста
-    async getBoostLevel(boostType) {
-        const snapshot = await get(this.userRef);
-        return snapshot.val().boostLevels?.[boostType] || 1;
-    }
-
-    // Улучшить буст
-    async upgradeBoost(boostType) {
-        const snapshot = await get(this.userRef);
-        if (snapshot.exists()) {
-            const currentLevel = snapshot.val().boostLevels?.[boostType] || 1;
-            // Здесь можно добавить логику цены улучшения
-            await update(this.userRef, {
-                [`boostLevels.${boostType}`]: currentLevel + 1
-            });
-        }
+    } catch (error) {
+        console.error('Init error:', error);
+        minerStatus.textContent = 'Ошибка загрузки';
     }
 }
 
-// Функция для получения рейтинга (топ игроков)
-async function getLeaderboard(limit = 100) {
-    const leaderboardRef = ref(database, 'users');
-    const snapshot = await get(leaderboardRef);
-    if (snapshot.exists()) {
-        const users = snapshot.val();
-        // Преобразуем объект в массив и сортируем по балансу
-        const leaderboard = Object.entries(users)
-            .map(([id, data]) => ({
-                id,
-                name: data.firstName || data.username || 'Аноним',
-                balance: data.balance || 0
-            }))
-            .sort((a, b) => b.balance - a.balance)
-            .slice(0, limit);
-        return leaderboard;
+function updateUI() {
+    if (currentUser) {
+        balanceEl.textContent = currentUser.balance?.toFixed(2) || '0';
+        
+        const energy = currentUser.energy || 0;
+        const maxEnergy = currentUser.maxEnergy || 1000;
+        const percent = (energy / maxEnergy) * 100;
+        energyBar.style.width = percent + '%';
+        energyValue.textContent = `${Math.floor(energy)} / ${maxEnergy}`;
+        
+        startMiningBtn.disabled = energy < 10;
     }
-    return [];
 }
 
-// Функция для глобального события (например, для будущей конвертации валют)
-async function globalEvent(eventType, eventData) {
-    const eventRef = ref(database, 'events/' + eventType);
-    await set(eventRef, {
-        ...eventData,
-        timestamp: serverTimestamp()
-    });
+function updateCountdown() {
+    const targetDate = new Date(2026, 1, 1, 0, 0, 0);
+    const now = new Date();
+    const diff = targetDate - now;
+
+    if (diff <= 0) {
+        countdownEl.textContent = 'Листинг сегодня!';
+        return;
+    }
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    countdownEl.textContent = `${days}д ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-// Экспортируем класс и функции для использования в app.js
-export { 
-    database, 
-    UserData, 
-    getLeaderboard, 
-    globalEvent 
-};
+function startEnergyRegeneration() {
+    setInterval(async () => {
+        if (userData && currentUser) {
+            await userData.regenerateEnergy();
+        }
+    }, 10000);
+}
+
+async function startMining() {
+    if (miningInterval) return;
+
+    if (!currentUser || currentUser.energy < 10) {
+        minerStatus.textContent = 'Недостаточно энергии';
+        return;
+    }
+
+    const success = await userData.useEnergy(10);
+    if (!success) {
+        minerStatus.textContent = 'Ошибка';
+        return;
+    }
+
+    minerStatus.textContent = 'Майнинг...';
+    startMiningBtn.disabled = true;
+    progressContainer.classList.remove('hidden');
+    miningStartTime = Date.now();
+    
+    const updateProgress = () => {
+        const elapsed = Date.now() - miningStartTime;
+        const percent = Math.min(100, (elapsed / miningDuration) * 100);
+        progressBar.style.width = percent + '%';
+        
+        if (elapsed >= miningDuration) {
+            finishMining();
+        }
+    };
+    
+    miningInterval = setInterval(updateProgress, 100);
+}
+
+async function finishMining() {
+    clearInterval(miningInterval);
+    miningInterval = null;
+    
+    const random = Math.random();
+    let reward = 0;
+    let message = '';
+    
+    if (random < 0.3) {
+        reward = 5;
+        message = `Успех! +${reward.toFixed(2)} WOL`;
+    } else {
+        reward = 0.5;
+        message = `Пул: +${reward.toFixed(2)} WOL`;
+    }
+    
+    const added = await userData.addCoins(reward);
+    if (added) {
+        minerStatus.textContent = message;
+    } else {
+        minerStatus.textContent = 'Ошибка начисления';
+    }
+    
+    progressContainer.classList.add('hidden');
+    startMiningBtn.disabled = false;
+}
+
+// События
+startMiningBtn.addEventListener('click', startMining);
+
+profileBtn.addEventListener('click', () => {
+    const msg = currentUser 
+        ? `Профиль ${currentUser.firstName || ''}\nБаланс: ${currentUser.balance} WOL`
+        : 'Профиль не загружен';
+    tg?.showAlert ? tg.showAlert(msg) : alert(msg);
+});
+
+navBoost.addEventListener('click', () => {
+    tg?.showAlert ? tg.showAlert('Бусты скоро') : alert('Бусты скоро');
+});
+
+navTasks.addEventListener('click', () => {
+    tg?.showAlert ? tg.showAlert('Задания скоро') : alert('Задания скоро');
+});
+
+navProfile.addEventListener('click', () => {
+    if (!currentUser) return;
+    const msg = `ID: ${currentUser.telegramId}\nДобыто: ${currentUser.totalMined?.toFixed(2) || 0} WOL`;
+    tg?.showAlert ? tg.showAlert(msg) : alert(msg);
+});
+
+// Старт
+document.addEventListener('DOMContentLoaded', initApp);
