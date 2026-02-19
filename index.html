@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WolCoin Miner</title>
+    <!-- Подключаем системные шрифты iOS / San Francisco (для устройств Apple) и Roboto для Android -->
+    <style>
+        @supports (font: -apple-system-body) {
+            html { font: -apple-system-body; }
+        }
+        @supports not (font: -apple-system-body) {
+            html { font-family: 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, sans-serif; }
+        }
+    </style>
+    <!-- Основные стили -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app" class="container">
+        <!-- Шапка с балансом и профилем -->
+        <header class="header">
+            <div class="balance-container">
+                <span class="balance-label">Баланс</span>
+                <span class="balance-amount" id="balance">0</span>
+                <span class="balance-currency">WOL</span>
+            </div>
+            <div class="profile-icon" id="profileBtn">
+                <!-- Здесь будет иконка профиля, пока просто круг -->
+                <div class="avatar-placeholder"></div>
+            </div>
+        </header>
+
+        <!-- Виджет обратного отсчёта до листинга -->
+        <div class="countdown-widget glass">
+            <span class="countdown-label">До листинга</span>
+            <span class="countdown-timer" id="countdown">15 дней 23:59:59</span>
+        </div>
+
+        <!-- Основная область майнинга -->
+        <main class="mining-area">
+            <div class="miner-card glass" id="minerCard">
+                <div class="miner-status">Майнинг не активен</div>
+                <button class="miner-button" id="startMiningBtn">Начать майнинг</button>
+                <!-- Индикатор прогресса (будет скрыт до начала майнинга) -->
+                <div class="progress-container hidden" id="progressContainer">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+            </div>
+            <!-- Энергия -->
+            <div class="energy-container glass">
+                <span class="energy-label">Энергия</span>
+                <div class="energy-bar-bg">
+                    <div class="energy-bar-fill" id="energyBar" style="width: 100%;"></div>
+                </div>
+                <span class="energy-value" id="energyValue">1000 / 1000</span>
+            </div>
+        </main>
+
+        <!-- Нижняя навигация (бусты и задания) -->
+        <nav class="bottom-nav glass">
+            <button class="nav-btn" id="navBoost">
+                <span class="nav-icon">⚡</span>
+                <span>Бусты</span>
+            </button>
+            <button class="nav-btn" id="navTasks">
+                <span class="nav-icon">📋</span>
+                <span>Задания</span>
+            </button>
+            <button class="nav-btn" id="navProfile">
+                <span class="nav-icon">👤</span>
+                <span>Профиль</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Подключаем Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Модули Firebase (используем SDK 9+ modular) -->
+    <script type="module" src="js/firebase.js"></script>
+    <!-- Основной скрипт приложения -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
